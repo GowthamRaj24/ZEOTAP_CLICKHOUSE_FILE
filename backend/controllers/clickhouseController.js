@@ -618,11 +618,19 @@ exports.flatFileToClickHouse = async (req, res) => {
     const results = [];
     let headers = [];
     let columnsWithTypes = [];
+    
+    // Parse the delimiter correctly (handle escaped characters like \t)
+    const actualDelimiter = delimiterChar === '\\t' ? '\t' : delimiterChar;
+    
+    const csv = require('csv-parser');
 
     // First pass: Read header and sample rows to determine columns and types
     await new Promise((resolve, reject) => {
       const stream = fs.createReadStream(filePath)
-        .pipe(csv({ separator: delimiterChar, mapHeaders: ({ header }) => header.trim() }))
+        .pipe(csv({ 
+          separator: actualDelimiter, 
+          mapHeaders: ({ header }) => header.trim() 
+        }))
         .on('headers', (h) => {
           headers = h.filter(header => header); // Filter out empty headers
           if (headers.length === 0) {
@@ -688,22 +696,32 @@ exports.flatFileToClickHouse = async (req, res) => {
 
     await client.query(createTableQuery).toPromise();
 
-    // Second pass: Read all data into memory and insert in batches (like importFromFile)
+    // Second pass: Read all data into memory and insert in batches
     console.log(`Reading entire file ${filePath} for batch insertion...`);
     const allData = [];
+    
+    // Create a new stream with the correct delimiter handling
     const dataStream = fs.createReadStream(filePath)
-        // Use the detected headers, skip the actual header row in the file
-        .pipe(csv({ separator: delimiterChar, headers: headers, skipLines: 1 }));
+        .pipe(csv({ 
+          separator: actualDelimiter, 
+          headers: headers, 
+          skipLines: 1,  // Skip header row
+          strict: true   // Enforce strict mode for better parsing
+        }));
 
     for await (const row of dataStream) {
-        // Ensure row structure matches headers - csv-parser usually handles this
-        // Basic check for empty rows or rows not matching header length (optional)
-        if (Object.keys(row).length === headers.length) {
-            allData.push(row);
-        } else {
-            console.warn('Skipping row due to mismatched column count:', row);
-        }
+        // Make sure we're actually collecting row data
+        const cleanRow = {}; 
+        
+        // Ensure each header is processed and preserve all data values
+        headers.forEach(header => {
+            // Use empty string for missing values instead of undefined
+            cleanRow[header] = row[header] || ''; 
+        });
+        
+        allData.push(cleanRow);
     }
+    
     console.log(`Finished reading file. ${allData.length} rows loaded into memory.`);
 
     // Insert data in batches
@@ -714,16 +732,21 @@ exports.flatFileToClickHouse = async (req, res) => {
         console.log(`Inserting ${allData.length} records in batches of ${batchSize}...`);
         // Correct column names for INSERT SQL statement: Quote original headers
         const columnNamesForInsert = headers.map(h => '`' + h.replace(/`/g, '``') + '`').join(', ');
-        // Construct query using simple concatenation, REMOVING FORMAT clause
-        const insertQuery = 'INSERT INTO ' + targetTable + ' (' + columnNamesForInsert + ')'; // Removed FORMAT JSONEachRow
+        // Construct query 
+        const insertQuery = 'INSERT INTO ' + targetTable + ' (' + columnNamesForInsert + ')';
 
         for (let i = 0; i < allData.length; i += batchSize) {
             const batch = allData.slice(i, i + batchSize);
             console.log(`Inserting batch ${i / batchSize + 1} (${batch.length} rows)`);
-            // Data in 'batch' MUST have keys matching original headers from CSV \
-            // The library will automatically format the JS objects in 'batch' (likely as JSONEachRow)\
-            await client.insert(insertQuery, batch).toPromise();
-            recordCount += batch.length;
+            
+            try {
+                await client.insert(targetTable, batch).toPromise();
+                recordCount += batch.length;
+                console.log(`Successfully inserted batch ${i / batchSize + 1}. Total records: ${recordCount}`);
+            } catch (batchError) {
+                console.error(`Error inserting batch ${i / batchSize + 1}:`, batchError);
+                throw new Error(`Failed to insert batch: ${batchError.message}`);
+            }
         }
         console.log('Finished inserting batches.');
     } else {
@@ -732,7 +755,7 @@ exports.flatFileToClickHouse = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: `Successfully imported data into table '${tableName.trim()}. Processed ${recordCount} rows.`,
+      message: `Successfully imported data into table '${tableName.trim()}'. Processed ${recordCount} rows.`,
       recordCount: recordCount
     });
 

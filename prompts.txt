@@ -1,0 +1,55 @@
+# My Journey Using AI Assistance for Development
+
+This file documents my experience using AI tools while building the Bidirectional ClickHouse File Connector project. As someone who's still learning how to effectively use AI assistants, my prompts evolved throughout the development process.
+
+## Initial Project Planning
+
+1. "I want to build something that connects ClickHouse and CSV files. What should I do?"
+
+2. "How do I make a ClickHouse to file connector with React?"
+
+## Working on the Frontend
+
+3. "Help me make React components for my ClickHouse export app"
+
+4. "How do I make a form look nice with TailwindCSS?"
+
+5. "My React state isn't working for the ClickHouse connection form. Why?"
+
+6. "Show me how to make a table that displays data from ClickHouse"
+
+7. "I need a progress bar for my app. How do I code that?"
+
+8. "What's the best way to call my backend API from React?"
+
+## Backend Challenges
+
+9. "My Express routes aren't working. Can you fix this code?"
+
+10. "How do I export a lot of data from ClickHouse without crashing my app?"
+
+11. "I'm confused about mapping CSV columns to ClickHouse. Help?"
+
+12. "Can you explain how to stream data and show progress at the same time?"
+
+13. "How should I check if ClickHouse connection details are valid?"
+
+14. "I need to track jobs that take a long time. What's the simplest way?"
+
+## Bug Fixing
+
+15. "Getting this error with ClickHouse: [error message]. What's wrong?"
+
+16. "My CSV parser breaks when there are commas in the text. How to fix?"
+
+17. "My app is really slow when exporting big tables. How can I make it faster?"
+
+18. "Sometimes my app crashes when there's a database error. How to prevent this?"
+
+## Documentation Help
+
+19. "What should I include in my README file?"
+
+20. "How do I document my API endpoints?"
+
+21. "I need to make a prompts.txt file showing how I used AI. My prompts weren't very good at first because I'm learning. How should I format this?" 
