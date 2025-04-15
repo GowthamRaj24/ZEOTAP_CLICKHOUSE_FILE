@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "clickhouse": "^2.6.0",
+    "@clickhouse/client": "^0.2.8",
     "axios": "^1.8.4",
     "cors": "^2.8.5",
     "csv-parser": "^3.0.0",
