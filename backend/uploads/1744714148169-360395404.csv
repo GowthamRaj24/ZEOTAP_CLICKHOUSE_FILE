@@ -1,6 +1,0 @@
-timestamp,user_id,session_id,page_url,referrer,browser,os,country,city,event_type,load_time_ms,is_new_user,device_type,screen_width,screen_height
-2023-11-01T09:15:32Z,user_12345,sess_abcd1234,/home,https://google.com,Chrome,Windows,United States,New York,pageview,1250,true,desktop,1920,1080
-2023-11-01T09:16:45Z,user_12345,sess_abcd1234,/products,/home,Chrome,Windows,United States,New York,pageview,980,false,desktop,1920,1080
-2023-11-01T09:18:12Z,user_12345,sess_abcd1234,/products/item123,/products,Chrome,Windows,United States,New York,pageview,1100,false,desktop,1920,1080
-2023-11-01T09:19:50Z,user_12345,sess_abcd1234,/cart,/products/item123,Chrome,Windows,United States,New York,pageview,850,false,desktop,1920,1080
-2023-11-01T09:22:31Z,user_12345,sess_abcd1234,/checkout,/cart,Chrome,Windows,United States,New York,pageview,1300,false,desktop,1920,1080

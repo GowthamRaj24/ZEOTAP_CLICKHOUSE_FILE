@@ -17,15 +17,12 @@ export const clickhouseApi = {
   
   executeQuery: (params) => api.post('/clickhouse/query', params),
   
-  uploadFile: (formData) => api.post('/file/upload', formData, {
+  // NEW function for direct file import
+  importFileToClickHouse: (formData) => api.post('/file/file-to-clickhouse', formData, {
     headers: {
       'Content-Type': 'multipart/form-data'
     }
   }),
-  
-  getFileColumns: (filename) => api.get(`/file/columns/${filename}`),
-  
-  importFile: (params) => api.post('/clickhouse/import', params),
   
   previewData: (connection, table, columns, limit = 10, page = 1, joinCondition = null, additionalTables = []) => {
     const tables = [table];
@@ -48,30 +45,7 @@ export const clickhouseApi = {
 
 // File API
 export const fileApi = {
-  uploadFile: (file, onProgress) => {
-    const formData = new FormData()
-    formData.append('file', file)
-    
-    return api.post('/file/upload', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data'
-      },
-      onUploadProgress: (progressEvent) => {
-        const percentCompleted = Math.round(
-          (progressEvent.loaded * 100) / progressEvent.total
-        )
-        if (onProgress) onProgress(percentCompleted)
-      }
-    })
-  },
-  
-  getColumns: (filePath, delimiter = ',') => 
-    api.post('/file/columns', { filePath, delimiter }),
-  
-  previewData: (filePath, delimiter = ',', columns, limit = 100) => 
-    api.post('/file/preview', { filePath, delimiter, columns, limit }),
-  
-  listFiles: () => api.get('/file/list')
+  // Kept empty for potential future file-related (non-import) functions
 }
 
 // Ingestion API

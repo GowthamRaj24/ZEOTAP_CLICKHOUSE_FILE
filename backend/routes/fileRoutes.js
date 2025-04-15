@@ -4,6 +4,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs-extra');
 const fileController = require('../controllers/fileController');
+const clickhouseController = require('../controllers/clickhouseController');
 
 // Define uploads directory consistently
 const uploadsDir = path.join(__dirname, '..', 'uploads');
@@ -22,26 +23,22 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage: storage });
 
-// Upload flat file
-router.post('/upload', upload.single('file'), fileController.uploadFile);
-
-// Get file columns endpoint
-router.get('/columns/:filename', fileController.getFileColumns);
-
 // Parse flat file columns
-router.post('/columns', fileController.getColumns);
+// router.post('/columns', fileController.getColumns);
 
 // Preview flat file data
-router.post('/preview', fileController.previewData);
+// router.post('/preview', fileController.previewData);
 
 // List previously uploaded files
-router.get('/list', fileController.listFiles);
+// router.get('/list', fileController.listFiles);
 
 // ClickHouse integration routes
-router.post('/clickhouse/tables', fileController.listClickHouseTables);
-router.post('/clickhouse/columns', fileController.getClickHouseColumns);
-router.post('/clickhouse/preview', fileController.previewClickHouseData);
-router.post('/clickhouse-to-file', fileController.clickHouseToFlatFile);
-router.post('/file-to-clickhouse', fileController.flatFileToClickHouse);
+// router.post('/clickhouse/tables', fileController.listClickHouseTables);
+// router.post('/clickhouse/columns', fileController.getClickHouseColumns);
+// router.post('/clickhouse/preview', fileController.previewClickHouseData);
+// router.post('/clickhouse-to-file', fileController.clickHouseToFlatFile);
+
+// Use clickhouseController for file import
+router.post('/file-to-clickhouse', upload.single('file'), clickhouseController.flatFileToClickHouse);
 
 module.exports = router; 

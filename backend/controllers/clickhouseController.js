@@ -4,7 +4,7 @@ const path = require('path');
 const csv = require('csv-parser');
 const { createObjectCsvWriter } = require('csv-writer');
 
-// Define uploads directory
+
 const uploadsDir = path.join(__dirname, '..', 'uploads');
 fs.ensureDirSync(uploadsDir);
 
@@ -573,4 +573,182 @@ function mapClickHouseType(chType) {
   } else {
     return 'String';
   }
-} 
+}
+
+// Flat file to ClickHouse
+exports.flatFileToClickHouse = async (req, res) => {
+  // Parse clickhouseConfig from stringified JSON
+  let parsedConfig;
+  try {
+    parsedConfig = JSON.parse(req.body.clickhouseConfig);
+  } catch (e) {
+    return res.status(400).json({ success: false, error: 'Invalid ClickHouse configuration format.' });
+  }
+  
+  const { tableName, delimiter: delimiterChar } = req.body;
+  const file = req.file;
+
+  if (!file) {
+    return res.status(400).json({ success: false, error: 'No file uploaded.' });
+  }
+
+  if (!tableName || !tableName.trim()) {
+    if (file?.path) await fs.remove(file.path).catch(err => console.error('Error cleaning up file:', err)); // Clean up if validation fails
+    return res.status(400).json({ success: false, error: 'Target table name is required.' });
+  }
+  if (!delimiterChar) {
+    if (file?.path) await fs.remove(file.path).catch(err => console.error('Error cleaning up file:', err));
+    return res.status(400).json({ success: false, error: 'Delimiter is required.' });
+  }
+
+  const filePath = file.path;
+  // Basic validation for table name
+  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(tableName.trim())) {
+    await fs.remove(filePath).catch(err => console.error('Error cleaning up file:', err)); // Clean up uploaded file
+    return res.status(400).json({ success: false, error: 'Invalid table name.' });
+  }
+
+  let client;
+  let recordCount = 0;
+
+  try {
+    // Use the internal connect function
+    client = await connectToClickHouse(parsedConfig);
+
+    const results = [];
+    let headers = [];
+    let columnsWithTypes = [];
+
+    // First pass: Read header and sample rows to determine columns and types
+    await new Promise((resolve, reject) => {
+      const stream = fs.createReadStream(filePath)
+        .pipe(csv({ separator: delimiterChar, mapHeaders: ({ header }) => header.trim() }))
+        .on('headers', (h) => {
+          headers = h.filter(header => header); // Filter out empty headers
+          if (headers.length === 0) {
+            stream.destroy(); // Stop processing if no headers
+            reject(new Error('Could not detect headers. Check delimiter or file format.'));
+            return; // Prevent further processing
+          }
+          // Check for duplicate headers
+          const headerSet = new Set(headers);
+          if (headerSet.size !== headers.length) {
+            stream.destroy();
+            reject(new Error('Duplicate header names detected. Please ensure all column names are unique.'));
+            return;
+          }
+        })
+        .on('data', (data) => {
+          // Ensure data object only contains keys present in the filtered headers
+          const filteredData = {};
+          headers.forEach(header => {
+            if (data.hasOwnProperty(header)) {
+              filteredData[header] = data[header];
+            }
+          });
+          results.push(filteredData);
+          if (results.length >= 20) { // Read up to 20 rows for type inference
+            stream.destroy(); // Stop reading more data
+          }
+        })
+        .on('close', () => { // 'close' is emitted when stream is destroyed or ends
+          if (stream.destroyed && results.length < 20 && headers.length === 0) {
+            resolve(); // Allow promise to resolve, error handled by reject
+            return;
+          }
+          
+          if (headers.length > 0 && results.length >= 0) { // Allow files with only headers
+            columnsWithTypes = headers.map(name => {
+              const type = 'String';
+              const safeName = '`' + name.replace(/`/g, '``') + '`';
+              return { name: safeName, type };
+            });
+            resolve();
+          } else if (!headers.length && !stream.destroyed) {
+            reject(new Error('No headers detected after reading file.'));
+          } else if (stream.destroyed) {
+            resolve();
+          } else {
+            reject(new Error('Could not read data rows or headers.'));
+          }
+        })
+        .on('error', (err) => reject(new Error(`Error parsing CSV header/sample: ${err.message}`)));
+    });
+
+    if (columnsWithTypes.length === 0) {
+      throw new Error('No columns detected or processed correctly in the file.');
+    }
+
+    // Generate CREATE TABLE statement
+    const columnDefinitions = columnsWithTypes.map(col => col.name + ' ' + col.type).join(', ');
+    const safeDbName = '`' + parsedConfig.database.replace(/`/g, '``') + '`';
+    const safeTableName = '`' + tableName.trim().replace(/`/g, '``') + '`';
+    const targetTable = safeDbName + '.' + safeTableName;
+    const createTableQuery = 'CREATE TABLE IF NOT EXISTS ' + targetTable + ' (' + columnDefinitions + ')' + ' ENGINE = MergeTree()' + ' ORDER BY tuple()';
+
+    await client.query(createTableQuery).toPromise();
+
+    // Second pass: Read all data into memory and insert in batches (like importFromFile)
+    console.log(`Reading entire file ${filePath} for batch insertion...`);
+    const allData = [];
+    const dataStream = fs.createReadStream(filePath)
+        // Use the detected headers, skip the actual header row in the file
+        .pipe(csv({ separator: delimiterChar, headers: headers, skipLines: 1 }));
+
+    for await (const row of dataStream) {
+        // Ensure row structure matches headers - csv-parser usually handles this
+        // Basic check for empty rows or rows not matching header length (optional)
+        if (Object.keys(row).length === headers.length) {
+            allData.push(row);
+        } else {
+            console.warn('Skipping row due to mismatched column count:', row);
+        }
+    }
+    console.log(`Finished reading file. ${allData.length} rows loaded into memory.`);
+
+    // Insert data in batches
+    const batchSize = 10000; // Adjust batch size as needed
+    recordCount = 0;
+
+    if (allData.length > 0) {
+        console.log(`Inserting ${allData.length} records in batches of ${batchSize}...`);
+        // Correct column names for INSERT SQL statement: Quote original headers
+        const columnNamesForInsert = headers.map(h => '`' + h.replace(/`/g, '``') + '`').join(', ');
+        // Construct query using simple concatenation, REMOVING FORMAT clause
+        const insertQuery = 'INSERT INTO ' + targetTable + ' (' + columnNamesForInsert + ')'; // Removed FORMAT JSONEachRow
+
+        for (let i = 0; i < allData.length; i += batchSize) {
+            const batch = allData.slice(i, i + batchSize);
+            console.log(`Inserting batch ${i / batchSize + 1} (${batch.length} rows)`);
+            // Data in 'batch' MUST have keys matching original headers from CSV \
+            // The library will automatically format the JS objects in 'batch' (likely as JSONEachRow)\
+            await client.insert(insertQuery, batch).toPromise();
+            recordCount += batch.length;
+        }
+        console.log('Finished inserting batches.');
+    } else {
+        console.log('No data rows found in the file to insert.');
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `Successfully imported data into table '${tableName.trim()}. Processed ${recordCount} rows.`,
+      recordCount: recordCount
+    });
+
+  } catch (error) {
+    console.error('Flat file to ClickHouse error:', error);
+    if (filePath) {
+      await fs.remove(filePath).catch(err => console.error('Error cleaning up file:', err));
+    }
+    res.status(500).json({
+      success: false,
+      error: `Import failed: ${error.message || 'An unknown error occurred'}`
+    });
+  } finally {
+    if (filePath && fs.existsSync(filePath)) {
+      await fs.remove(filePath).catch(err => console.error('Error cleaning up file in finally:', err));
+      console.log(`Cleaned up temporary file: ${filePath}`);
+    }
+  }
+};
