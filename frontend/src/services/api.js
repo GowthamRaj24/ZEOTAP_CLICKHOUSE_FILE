@@ -1,7 +1,8 @@
 import axios from 'axios'
 
 // Export the baseURL so it can be imported elsewhere
-export const baseURL = 'http://localhost:5000/api'
+
+export const baseURL = 'https://zeotap-clickhouse-file.onrender.com/api'
 
 const api = axios.create({
   baseURL

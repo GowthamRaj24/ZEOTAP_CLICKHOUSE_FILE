@@ -1,4 +1,4 @@
 const instance = axios.create({
-  baseURL: 'http://localhost:5000/api',
+  baseURL: 'https://zeotap-clickhouse-file.onrender.com/api',
   // ...other config
 }); 
