@@ -8,5 +8,9 @@ export default defineConfig({
       // Enable the new JSX transform
       jsxRuntime: 'automatic'
     })
-  ]
+  ],
+  // Ensure environment variables are loaded correctly
+  define: {
+    'process.env': {}
+  }
 }) 

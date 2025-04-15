@@ -227,7 +227,7 @@ function ClickHouseToFile() {
     
     // Create a link to download the file
     const link = document.createElement('a')
-    link.href = `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/${exportFile}`
+    link.href = `${import.meta.env.VITE_API_URL || 'https://zeotap-clickhouse-file.onrender.com'}/${exportFile}`
     link.download = exportFile.split('/').pop()
     document.body.appendChild(link)
     link.click()
