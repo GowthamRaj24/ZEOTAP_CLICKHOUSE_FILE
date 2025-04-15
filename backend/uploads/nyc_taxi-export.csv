@@ -1,0 +1,2 @@
+trip_id,pickup_datetime,dropoff_datetime,pickup_longitude,pickup_latitude,dropoff_latitude,passenger_count,trip_distance,fare_amount,extra,tip_amount,tolls_amount,payment_type,pickup_ntaname,dropoff_ntaname
+

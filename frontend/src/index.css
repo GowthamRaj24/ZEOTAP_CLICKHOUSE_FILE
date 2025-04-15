@@ -1,0 +1,110 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Lexend:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    @apply scroll-smooth;
+  }
+  
+  body {
+    @apply bg-gradient-to-b from-secondary-50 to-secondary-100 min-h-screen font-sans text-secondary-800;
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-display font-semibold text-secondary-900;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-white rounded-xl shadow-card p-6 transition-all duration-300 border border-secondary-200;
+  }
+  
+  .card:hover {
+    @apply shadow-card-hover border-secondary-300;
+  }
+  
+  .input {
+    @apply w-full px-4 py-2 rounded-lg border border-secondary-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 focus:outline-none shadow-input transition duration-200;
+  }
+  
+  .input:disabled {
+    @apply bg-secondary-100 cursor-not-allowed opacity-75;
+  }
+  
+  .btn {
+    @apply px-4 py-2 rounded-lg font-medium transition-all duration-200 inline-flex items-center justify-center;
+  }
+  
+  .btn-primary {
+    @apply bg-primary-600 text-white hover:bg-primary-700 focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 shadow-md;
+  }
+  
+  .btn-primary:disabled {
+    @apply bg-primary-400 cursor-not-allowed;
+  }
+  
+  .btn-secondary {
+    @apply bg-white text-secondary-700 border border-secondary-300 hover:bg-secondary-50 focus:ring-2 focus:ring-secondary-500 focus:ring-offset-2 shadow-sm;
+  }
+  
+  .btn-secondary:disabled {
+    @apply bg-secondary-50 text-secondary-400 cursor-not-allowed;
+  }
+  
+  .table-header {
+    @apply bg-gradient-to-r from-secondary-100 to-secondary-50 text-secondary-800;
+  }
+  
+  /* Custom scrollbar for better aesthetics */
+  ::-webkit-scrollbar {
+    @apply w-2;
+  }
+  
+  ::-webkit-scrollbar-track {
+    @apply bg-secondary-100 rounded-full;
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    @apply bg-secondary-300 rounded-full hover:bg-secondary-400 transition-colors;
+  }
+}
+
+body {
+  @apply bg-gray-50 text-gray-900;
+}
+
+.btn {
+  @apply px-4 py-2 rounded-md transition-colors duration-200;
+}
+
+.btn-primary {
+  @apply bg-blue-500 text-white hover:bg-blue-600;
+}
+
+.btn-secondary {
+  @apply bg-gray-200 text-gray-800 hover:bg-gray-300;
+}
+
+.btn-danger {
+  @apply bg-red-500 text-white hover:bg-red-600;
+}
+
+.input {
+  @apply border border-gray-300 rounded-md px-3 py-2 w-full focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent;
+}
+
+.card {
+  @apply bg-white shadow-md rounded-lg p-6;
+}
+
+.animation-delay-2000 {
+  animation-delay: 2s;
+}
+
+.animation-delay-4000 {
+  animation-delay: 4s;
+} 
