@@ -142,21 +142,21 @@ function FileToClickHouse() {
   }, [loading, isComplete, error])
 
   return (
-    <div>
-      <h1 className="text-3xl font-bold mb-6">File to ClickHouse</h1>
+    <div className="max-w-4xl mx-auto">
+      <div className="text-center mb-8">
+        <h1 className="text-3xl font-bold">File to ClickHouse</h1>
+        <p className="text-xl text-gray-600 mt-2">
+          Import data from flat files to your ClickHouse database
+        </p>
+      </div>
       
       <ClickHouseForm onConnect={setClickhouseConfig} isConnected={!!clickhouseConfig} />
       
       <div className="card mb-6">
-        <div className="flex items-center mb-6">
-          <div className="p-3 bg-primary-100 rounded-lg mr-4">
-            <FaUpload className="text-primary-600 text-xl" />
-          </div>
-          <h2 className="text-xl font-bold">File Upload</h2>
-        </div>
+        <h2 className="text-xl font-bold mb-4">File Upload</h2>
         
         <div className="mb-4">
-          <label className="block text-secondary-700 font-medium mb-2">
+          <label className="block text-gray-700 mb-1">
             Select File (CSV or TSV)
           </label>
           <input
@@ -204,36 +204,53 @@ function FileToClickHouse() {
       
       {columns.length > 0 && (
         <div className="card mb-6">
-          <div className="flex items-center mb-6">
-            <div className="p-3 bg-primary-100 rounded-lg mr-4">
-              <FaTable className="text-primary-600 text-xl" />
-            </div>
-            <h2 className="text-xl font-bold">Select Columns</h2>
-          </div>
+          <h2 className="text-xl font-bold mb-4">Select Columns</h2>
           
           <ColumnSelector 
             columns={columns}
             selectedColumns={selectedColumns}
             onChange={setSelectedColumns}
+            onColumnToggle={(col) => {
+              if (selectedColumns.includes(col)) {
+                setSelectedColumns(selectedColumns.filter(c => c !== col));
+              } else {
+                setSelectedColumns([...selectedColumns, col]);
+              }
+            }}
+            onSelectAll={() => setSelectedColumns(columns.map(col => col.name))}
+            onSelectNone={() => setSelectedColumns([])}
           />
         </div>
       )}
       
       {(loading || isComplete || error) && (
-        <ProgressBar 
-          progress={progress} 
-          isComplete={isComplete}
-          error={error}
-        />
+        <div className="card mb-6">
+          <h2 className="text-xl font-bold mb-4">Import Progress</h2>
+          
+          <ProgressBar 
+            progress={progress} 
+            isComplete={isComplete}
+            error={error}
+          />
+          
+          {isComplete && totalRecords > 0 && (
+            <div className="mt-4 p-4 bg-green-50 text-green-800 rounded-lg">
+              <p className="font-medium">Import completed successfully!</p>
+              <p>Imported {totalRecords} records to ClickHouse.</p>
+            </div>
+          )}
+        </div>
       )}
       
-      <div className="mt-6">
+      <div className="card mb-6">
+        <h2 className="text-xl font-bold mb-4">Import to ClickHouse</h2>
+        
         <button
           onClick={handleImport}
           className="btn btn-primary"
           disabled={!uploadedFile || selectedColumns.length === 0 || loading || !clickhouseConfig}
         >
-          Import to ClickHouse
+          Import Data
         </button>
       </div>
     </div>

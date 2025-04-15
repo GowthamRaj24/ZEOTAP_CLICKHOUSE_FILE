@@ -1,0 +1,16 @@
+id,first_name,last_name,email,date_joined,orders,last_purchase_amount
+1,John,Smith,john.smith@example.com,2022-01-15,5,89.99
+2,Emma,Johnson,emma.j@example.com,2022-02-03,12,145.50
+3,Michael,Williams,mike.williams@example.com,2022-02-17,3,34.25
+4,Sarah,Brown,sarah.brown@example.com,2022-03-20,8,67.80
+5,David,Jones,djones@example.com,2022-04-01,0,0.00
+6,Lisa,Garcia,lisa.garcia@example.com,2022-04-15,2,25.99
+7,Robert,Miller,robert.m@example.com,2022-05-02,7,112.75
+8,Jennifer,Davis,jen.davis@example.com,2022-05-18,4,56.20
+9,William,Rodriguez,will.rod@example.com,2022-06-10,1,19.99
+10,Elizabeth,Martinez,e.martinez@example.com,2022-06-25,9,78.50
+11,Richard,Hernandez,rich.h@example.com,2022-07-08,6,92.30
+12,Patricia,Lopez,patricia.l@example.com,2022-07-22,11,134.99
+13,Charles,Gonzalez,charles.g@example.com,2022-08-05,3,45.60
+14,Linda,Wilson,l.wilson@example.com,2022-08-19,2,29.95
+15,Thomas,Anderson,t.anderson@example.com,2022-09-01,8,105.75 
