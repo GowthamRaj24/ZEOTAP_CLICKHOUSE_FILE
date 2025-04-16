@@ -224,7 +224,7 @@ function DatabaseConnect() {
                 value={connection.password}
                 onChange={handleChange}
                 className="input"
-                placeholder="Password (optional)"
+                placeholder="Password"
               />
             </div>
           </div>
