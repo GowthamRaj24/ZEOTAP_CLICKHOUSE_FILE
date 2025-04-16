@@ -668,8 +668,7 @@ exports.flatFileToClickHouse = async (req, res) => {
           if (headers.length > 0 && results.length >= 0) { // Allow files with only headers
             columnsWithTypes = headers.map(name => {
               const type = 'String';
-              const safeName = '`' + name.replace(/`/g, '``') + '`';
-              return { name: safeName, type };
+              return { name, type }; // Remove backticks - they cause issues with ClickHouse
             });
             resolve();
           } else if (!headers.length && !stream.destroyed) {
@@ -687,12 +686,12 @@ exports.flatFileToClickHouse = async (req, res) => {
       throw new Error('No columns detected or processed correctly in the file.');
     }
 
-    // Generate CREATE TABLE statement
-    const columnDefinitions = columnsWithTypes.map(col => col.name + ' ' + col.type).join(', ');
-    const safeDbName = '`' + parsedConfig.database.replace(/`/g, '``') + '`';
-    const safeTableName = '`' + tableName.trim().replace(/`/g, '``') + '`';
-    const targetTable = safeDbName + '.' + safeTableName;
-    const createTableQuery = 'CREATE TABLE IF NOT EXISTS ' + targetTable + ' (' + columnDefinitions + ')' + ' ENGINE = MergeTree()' + ' ORDER BY tuple()';
+    // Generate CREATE TABLE statement without backticks
+    const columnDefinitions = columnsWithTypes.map(col => `${col.name} ${col.type}`).join(', ');
+    const safeDbName = parsedConfig.database;
+    const safeTableName = tableName.trim();
+    const targetTable = `${safeDbName}.${safeTableName}`;
+    const createTableQuery = `CREATE TABLE IF NOT EXISTS ${targetTable} (${columnDefinitions}) ENGINE = MergeTree() ORDER BY tuple()`;
 
     await client.query(createTableQuery).toPromise();
 
@@ -730,17 +729,38 @@ exports.flatFileToClickHouse = async (req, res) => {
 
     if (allData.length > 0) {
         console.log(`Inserting ${allData.length} records in batches of ${batchSize}...`);
-        // Correct column names for INSERT SQL statement: Quote original headers
-        const columnNamesForInsert = headers.map(h => '`' + h.replace(/`/g, '``') + '`').join(', ');
-        // Construct query 
-        const insertQuery = 'INSERT INTO ' + targetTable + ' (' + columnNamesForInsert + ')';
-
+        
         for (let i = 0; i < allData.length; i += batchSize) {
             const batch = allData.slice(i, i + batchSize);
             console.log(`Inserting batch ${i / batchSize + 1} (${batch.length} rows)`);
             
             try {
-                await client.insert(targetTable, batch).toPromise();
+                // Convert batch data to CSV-style rows for insertion
+                // This is the most compatible approach for various client versions
+                let rows = '';
+                const columnNames = Object.keys(batch[0]);
+                
+                // Build the VALUES part of the query with actual data
+                batch.forEach(row => {
+                    const values = columnNames.map(col => {
+                        // Properly escape string values
+                        const val = row[col];
+                        if (val === null || val === undefined) return 'NULL';
+                        if (typeof val === 'string') return `'${val.replace(/'/g, "''")}'`;
+                        return val;
+                    });
+                    rows += `(${values.join(', ')}),`;
+                });
+                
+                // Remove trailing comma
+                if (rows.endsWith(',')) {
+                    rows = rows.slice(0, -1);
+                }
+                
+                // Create and execute the complete INSERT statement
+                const insertQuery = `INSERT INTO ${targetTable} (${columnNames.join(', ')}) VALUES ${rows}`;
+                await client.query(insertQuery).toPromise();
+                
                 recordCount += batch.length;
                 console.log(`Successfully inserted batch ${i / batchSize + 1}. Total records: ${recordCount}`);
             } catch (batchError) {

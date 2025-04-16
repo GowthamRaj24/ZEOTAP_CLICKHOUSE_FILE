@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react'
-import { toast } from 'react-toastify'
 import ClickHouseForm from '../components/ClickHouseForm'
 import ColumnSelector from '../components/ColumnSelector'
 import DataPreview from '../components/DataPreview'
 import ProgressBar from '../components/ProgressBar'
 import { clickhouseApi, ingestionApi } from '../services/api'
+import { getApiUrl } from '../config/appConfig'
+import { notify } from '../config/toastConfig'
 
 function ClickHouseToFile() {
   const [connection, setConnection] = useState(null)
@@ -72,23 +73,23 @@ function ClickHouseToFile() {
           setProgress(100)
           setIsComplete(true)
           setExportFile(job.outputFile)
-          toast.success('Export completed successfully!')
+          notify.success('Export completed successfully!')
           clearInterval(intervalId)
         } else if (job.status === 'failed') {
           // Job failed
           setError(job.message || 'Export failed')
-          toast.error('Export failed: ' + (job.message || 'Unknown error'))
+          notify.error('Export failed: ' + (job.message || 'Unknown error'))
           clearInterval(intervalId)
         } else if (job.status === 'unknown') {
           // Job not found
           setError(job.message || 'Job not found')
-          toast.error(job.message || 'Job not found')
+          notify.error(job.message || 'Job not found')
           clearInterval(intervalId)
         }
       } catch (error) {
         console.error('Error checking job status:', error)
         setError('Failed to check job status: ' + (error.response?.data?.message || error.message))
-        toast.error('Failed to check job status')
+        notify.error('Failed to check job status')
         clearInterval(intervalId)
       }
     }, 1000)
@@ -103,7 +104,7 @@ function ClickHouseToFile() {
       setTables(response.data.tables)
     } catch (error) {
       console.error('Failed to load tables:', error)
-      toast.error(`Failed to load tables: ${error.response?.data?.error?.message || error.message}`)
+      notify.error(`Failed to load tables: ${error.response?.data?.error?.message || error.message}`)
     } finally {
       setLoading(false)
     }
@@ -136,11 +137,11 @@ function ClickHouseToFile() {
         setSelectedColumns(response.data.columns.map(col => col.name));
       } else {
         console.error('Error loading columns:', response.data.error);
-        toast.error(`Failed to load columns: ${response.data.error}`);
+        notify.error(`Failed to load columns: ${response.data.error}`);
       }
     } catch (error) {
       console.error('Failed to load columns:', error);
-      toast.error(`Failed to load columns: ${error.response?.data?.error || error.message}`);
+      notify.error(`Failed to load columns: ${error.response?.data?.error || error.message}`);
     } finally {
       setLoading(false);
     }
@@ -148,7 +149,7 @@ function ClickHouseToFile() {
   
   const loadPreview = async () => {
     if (!selectedTable || selectedColumns.length === 0) {
-      toast.warn('Please select a table and at least one column')
+      notify.warn('Please select a table and at least one column')
       return
     }
     
@@ -165,7 +166,7 @@ function ClickHouseToFile() {
       setTotalCount(response.data.totalCount)
     } catch (error) {
       console.error('Failed to load preview:', error)
-      toast.error(`Failed to load preview: ${error.response?.data?.error?.message || error.message}`)
+      notify.error(`Failed to load preview: ${error.response?.data?.error?.message || error.message}`)
     } finally {
       setLoading(false)
     }
@@ -191,7 +192,7 @@ function ClickHouseToFile() {
   
   const startExport = async () => {
     if (!selectedTable || selectedColumns.length === 0) {
-      toast.warn('Please select a table and at least one column')
+      notify.warn('Please select a table and at least one column')
       return
     }
     
@@ -212,10 +213,10 @@ function ClickHouseToFile() {
       })
       
       setJobId(response.data.jobId)
-      toast.info('Export started!')
+      notify.info('Export started!')
     } catch (error) {
       console.error('Failed to start export:', error)
-      toast.error(`Failed to start export: ${error.response?.data?.error?.message || error.message}`)
+      notify.error(`Failed to start export: ${error.response?.data?.error?.message || error.message}`)
       setError(`Failed to start export: ${error.response?.data?.error?.message || error.message}`)
     } finally {
       setLoading(false)
@@ -227,7 +228,8 @@ function ClickHouseToFile() {
     
     // Create a link to download the file
     const link = document.createElement('a')
-    link.href = `${import.meta.env.VITE_API_URL || 'https://zeotap-clickhouse-file.onrender.com'}/${exportFile}`
+    const apiBaseUrl = getApiUrl().replace('/api', '')
+    link.href = `${apiBaseUrl}/${exportFile}`
     link.download = exportFile.split('/').pop()
     document.body.appendChild(link)
     link.click()
@@ -238,10 +240,8 @@ function ClickHouseToFile() {
     setSelectedTable(tableValue);
     
     if (tableValue) {
-      // Pass the selected table to the loadColumns function
       loadColumns(tableValue);
     } else {
-      // Clear columns if no table is selected
       setColumns([]);
       setSelectedColumns([]);
     }

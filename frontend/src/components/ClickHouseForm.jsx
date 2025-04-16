@@ -1,8 +1,8 @@
 import React, { useState } from 'react'
-import { toast } from 'react-toastify'
 import { clickhouseApi, baseURL } from '../services/api'
 import { FaDatabase, FaServer, FaLock, FaUser, FaKey } from 'react-icons/fa'
 import axios from 'axios'
+import { notify } from '../config/toastConfig'
 
 function ClickHouseForm({ onConnect, isConnected }) {
   const [loading, setLoading] = useState(false)
@@ -29,7 +29,7 @@ function ClickHouseForm({ onConnect, isConnected }) {
       
       // Skip the direct axios call and just use the API service
       await clickhouseApi.testConnection(connection)
-      toast.success('Connected to ClickHouse successfully!')
+      notify.success('Connected to ClickHouse successfully!')
       onConnect(connection)
     } catch (error) {
       console.error('Connection failed:', error)
@@ -46,7 +46,7 @@ function ClickHouseForm({ onConnect, isConnected }) {
         errorMessage += `: ${error.message}`
       }
       
-      toast.error(errorMessage)
+      notify.error(errorMessage)
     } finally {
       setLoading(false)
     }

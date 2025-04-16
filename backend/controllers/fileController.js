@@ -35,17 +35,6 @@ function determineColumnType(values) {
   return 'String'
 }
 
-// REMOVED exports.getColumns function (using body params) - This logic is merged/simplified below
-
-// REMOVED exports.previewData function (or needs significant refactor if kept)
-
-// REMOVED exports.listFiles function
-
-// REMOVED ClickHouse specific listing/preview functions (these belong in clickhouseController)
-// exports.listClickHouseTables
-// exports.getClickHouseColumns
-// exports.previewClickHouseData
-// exports.clickHouseToFlatFile
 
 // Add a new endpoint for handling larger files with better performance
 exports.streamData = (req, res) => {

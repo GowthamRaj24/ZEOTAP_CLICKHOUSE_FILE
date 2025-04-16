@@ -1,8 +1,8 @@
 import axios from 'axios'
+import { getApiUrl } from '../config/appConfig'
 
 // Export the baseURL so it can be imported elsewhere
-
-export const baseURL = 'https://zeotap-clickhouse-file.onrender.com/api'
+export const baseURL = getApiUrl()
 
 const api = axios.create({
   baseURL

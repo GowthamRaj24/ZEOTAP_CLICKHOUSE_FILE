@@ -8,6 +8,7 @@ import ClickHouseToFile from './pages/ClickHouseToFile'
 import FileToClickHouse from './pages/FileToClickHouse'
 import 'react-toastify/dist/ReactToastify.css'
 import ErrorBoundary from './components/ErrorBoundary'
+import { containerConfig } from './config/toastConfig'
 
 function App() {
   return (
@@ -22,18 +23,7 @@ function App() {
           </Routes>
         </main>
         <Footer />
-        <ToastContainer
-          position="top-right"
-          autoClose={3000}
-          hideProgressBar={false}
-          newestOnTop
-          closeOnClick
-          rtl={false}
-          pauseOnFocusLoss
-          draggable
-          pauseOnHover
-          theme="light"
-        />
+        <ToastContainer {...containerConfig} />
       </div>
     </ErrorBoundary>
   )

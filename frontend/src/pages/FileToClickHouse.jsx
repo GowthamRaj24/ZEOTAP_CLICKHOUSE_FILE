@@ -1,8 +1,8 @@
 import React, { useState } from 'react'
-import { toast } from 'react-toastify'
 import ClickHouseForm from '../components/ClickHouseForm'
 import { clickhouseApi } from '../services/api'
 import { FaFileAlt, FaDatabase, FaTable } from 'react-icons/fa'
+import { notify } from '../config/toastConfig'
 
 function FileToClickHouse() {
   const [clickhouseConfig, setClickhouseConfig] = useState(null)
@@ -30,24 +30,24 @@ function FileToClickHouse() {
     setImportResult(null)
 
     if (!clickhouseConfig) {
-      toast.error('Please connect to ClickHouse first')
+      notify.error('Please connect to ClickHouse first')
       return
     }
     if (!file) {
-      toast.error('Please select a file')
+      notify.error('Please select a file')
       return
     }
     if (!delimiter) {
-        toast.error('Please select a delimiter')
+        notify.error('Please select a delimiter')
         return
     }
     if (!tableName || !tableName.trim()) {
-      toast.error('Please enter a target table name')
+      notify.error('Please enter a target table name')
       return
     }
     // Basic table name validation (alphanumeric + underscore, starting with letter or underscore)
     if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(tableName.trim())) {
-        toast.error('Invalid table name. Use letters, numbers, and underscores, starting with a letter or underscore.')
+        notify.error('Invalid table name. Use letters, numbers, and underscores, starting with a letter or underscore.')
         return
     }
 
@@ -66,7 +66,7 @@ function FileToClickHouse() {
 
       if (response.data.success) {
         setImportResult(response.data) // Store result for display
-        toast.success(response.data.message || 'Import successful!')
+        notify.success(response.data.message || 'Import successful!')
         setFile(null) // Clear file input after successful import
         // Optionally clear table name too, or keep it for next import
         // setTableName('')
@@ -77,7 +77,7 @@ function FileToClickHouse() {
       console.error('Import error:', err)
       const errorMessage = err.response?.data?.error || err.message || 'Failed to import data'
       setError(errorMessage)
-      toast.error(`Import failed: ${errorMessage}`)
+      notify.error(`Import failed: ${errorMessage}`)
     } finally {
       setLoading(false)
     }
