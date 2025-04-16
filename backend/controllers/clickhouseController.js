@@ -561,25 +561,29 @@ function mapClickHouseType(chType) {
   }
 }
 
-// Flat file to ClickHouse
+// CSV to ClickHouse
 exports.flatFileToClickHouse = async (req, res) => {
   // Get connection config from middleware
   const parsedConfig = req.connectionConfig;
   
-  const { tableName, delimiter: delimiterChar } = req.body;
+  const { tableName, sanitizeHeaders } = req.body;
   const file = req.file;
+  // Always use comma delimiter for CSV
+  const delimiterChar = ',';
 
   if (!file) {
     return res.status(400).json({ success: false, error: 'No file uploaded.' });
   }
 
+  // Check if file is CSV
+  if (!file.originalname.toLowerCase().endsWith('.csv')) {
+    if (file?.path) await fs.remove(file.path).catch(err => console.error('Error cleaning up file:', err));
+    return res.status(400).json({ success: false, error: 'Only CSV files are supported.' });
+  }
+
   if (!tableName || !tableName.trim()) {
     if (file?.path) await fs.remove(file.path).catch(err => console.error('Error cleaning up file:', err)); // Clean up if validation fails
     return res.status(400).json({ success: false, error: 'Target table name is required.' });
-  }
-  if (!delimiterChar) {
-    if (file?.path) await fs.remove(file.path).catch(err => console.error('Error cleaning up file:', err));
-    return res.status(400).json({ success: false, error: 'Delimiter is required.' });
   }
 
   const filePath = file.path;
@@ -610,7 +614,19 @@ exports.flatFileToClickHouse = async (req, res) => {
       const stream = fs.createReadStream(filePath)
         .pipe(csv({ 
           separator: actualDelimiter, 
-          mapHeaders: ({ header }) => header.trim() 
+          mapHeaders: ({ header }) => {
+            // More robust header sanitization
+            if (sanitizeHeaders === 'true') {
+              return header
+                .trim()
+                .replace(/\s+/g, '_')  // Replace spaces with underscores
+                .replace(/[^a-zA-Z0-9_]/g, '') // Remove special characters
+                .replace(/^[^a-zA-Z_]/, '_')   // Ensure it starts with letter or underscore
+                .toLowerCase();  // Convert to lowercase for consistency
+            }
+            // If not sanitizing, just trim the header to avoid issues with leading/trailing spaces
+            return header.trim();
+          }
         }))
         .on('headers', (h) => {
           headers = h.filter(header => header); // Filter out empty headers
@@ -622,9 +638,22 @@ exports.flatFileToClickHouse = async (req, res) => {
           // Check for duplicate headers
           const headerSet = new Set(headers);
           if (headerSet.size !== headers.length) {
-            stream.destroy();
-            reject(new Error('Duplicate header names detected. Please ensure all column names are unique.'));
-            return;
+            // Find duplicates and make them unique
+            const uniqueHeaders = [];
+            const headerCounts = {};
+            
+            headers.forEach(header => {
+              if (!headerCounts[header]) {
+                headerCounts[header] = 1;
+                uniqueHeaders.push(header);
+              } else {
+                headerCounts[header]++;
+                uniqueHeaders.push(`${header}_${headerCounts[header]}`);
+              }
+            });
+            
+            headers = uniqueHeaders;
+            console.log('Duplicate headers detected and made unique:', headers);
           }
         })
         .on('data', (data) => {
@@ -646,10 +675,11 @@ exports.flatFileToClickHouse = async (req, res) => {
             return;
           }
           
-          if (headers.length > 0 && results.length >= 0) { // Allow files with only headers
+          if (headers.length > 0 && results.length >= 0) {
             columnsWithTypes = headers.map(name => {
+              // Use regular String type instead of String(65535) which causes issues with some ClickHouse versions
               const type = 'String';
-              return { name, type }; // Remove backticks - they cause issues with ClickHouse
+              return { name, type };
             });
             resolve();
           } else if (!headers.length && !stream.destroyed) {
@@ -668,95 +698,246 @@ exports.flatFileToClickHouse = async (req, res) => {
     }
 
     // Generate CREATE TABLE statement without backticks
-    const columnDefinitions = columnsWithTypes.map(col => `${col.name} ${col.type}`).join(', ');
+    const columnDefinitions = columnsWithTypes.map(col => `\`${col.name}\` ${col.type}`).join(', ');
     const safeDbName = parsedConfig.database;
     const safeTableName = tableName.trim();
     const targetTable = `${safeDbName}.${safeTableName}`;
     const createTableQuery = `CREATE TABLE IF NOT EXISTS ${targetTable} (${columnDefinitions}) ENGINE = MergeTree() ORDER BY tuple()`;
 
+    console.log('Creating table with query:', createTableQuery);
+    console.log('Column names in CREATE TABLE:', columnsWithTypes.map(col => col.name).join(', '));
     await client.query(createTableQuery).toPromise();
 
-    // Second pass: Read all data into memory and insert in batches
-    console.log(`Reading entire file ${filePath} for batch insertion...`);
-    const allData = [];
+    // Second pass: Read data in smaller chunks and process incrementally instead of loading entire file
+    console.log(`Processing file ${filePath} in chunks to minimize memory usage...`);
+    const totalRows = await countFileLines(filePath) - 1; // Subtract 1 for header row
+    console.log(`Detected approximately ${totalRows} rows in the file.`);
     
-    // Create a new stream with the correct delimiter handling
-    const dataStream = fs.createReadStream(filePath)
-        .pipe(csv({ 
-          separator: actualDelimiter, 
-          headers: headers, 
-          skipLines: 1,  // Skip header row
-          strict: true   // Enforce strict mode for better parsing
-        }));
-
-    for await (const row of dataStream) {
-        // Make sure we're actually collecting row data
-        const cleanRow = {}; 
-        
-        // Ensure each header is processed and preserve all data values
-        headers.forEach(header => {
-            // Use empty string for missing values instead of undefined
-            cleanRow[header] = row[header] || ''; 
-        });
-        
-        allData.push(cleanRow);
-    }
-    
-    console.log(`Finished reading file. ${allData.length} rows loaded into memory.`);
-
-    // Insert data in batches
-    const batchSize = 10000; // Adjust batch size as needed
     recordCount = 0;
-
-    if (allData.length > 0) {
-        console.log(`Inserting ${allData.length} records in batches of ${batchSize}...`);
+    const batchSize = 1000; // Process 1000 rows at a time
+    let currentBatch = [];
+    let totalProcessed = 0;
+    let batchIndex = 0;
+    
+    // Set ClickHouse session settings for optimal performance with large inserts
+    await client.query('SET max_insert_block_size = 1000').toPromise();
+    await client.query('SET min_insert_block_size_rows = 1000').toPromise();
+    await client.query('SET min_insert_block_size_bytes = 0').toPromise();
+    await client.query('SET max_block_size = 1000').toPromise();
+    await client.query('SET insert_distributed_sync = 0').toPromise(); // Async inserts
+    
+    // Maximum safe string length for ClickHouse
+    const MAX_STRING_LENGTH = 65000;
+    
+    // Function to process a batch without retries
+    const processBatch = async (batch, batchIndex) => {
+        try {
+            // Convert batch data to CSV-style rows for insertion
+            let rows = '';
+            
+            // Build the VALUES part of the query with actual data
+            batch.forEach(row => {
+                const values = headers.map(col => {
+                    // Properly escape string values and truncate if too long
+                    const val = row[col];
+                    if (val === null || val === undefined || val === '') return 'NULL';
+                    if (typeof val === 'string') {
+                        // Truncate long strings to prevent "Field value too long" errors
+                        const truncatedVal = val.length > MAX_STRING_LENGTH 
+                            ? val.substring(0, MAX_STRING_LENGTH) 
+                            : val;
+                        // Additional string sanitization to prevent SQL injection
+                        return `'${truncatedVal.replace(/'/g, "''").replace(/\\/g, "\\\\")}'`;
+                    }
+                    return val;
+                });
+                rows += `(${values.join(', ')}),`;
+            });
+            
+            // Remove trailing comma
+            if (rows.endsWith(',')) {
+                rows = rows.slice(0, -1);
+            }
+            
+            // Ensure column names in the query exactly match those in the table
+            const insertQuery = `INSERT INTO ${targetTable} (${headers.map(col => `\`${col}\``).join(', ')}) VALUES ${rows}`;
+            
+            // Log a sample of the query for debugging (first 100 chars to keep logs manageable)
+            console.log(`Executing batch ${batchIndex + 1}: ${insertQuery.substring(0, 100)}...`);
+            
+            await client.query(insertQuery).toPromise();
+            
+            return batch.length;
+        } catch (batchError) {
+            console.error(`Error inserting batch ${batchIndex + 1}:`, batchError.message);
+            
+            // For column issues, provide more detailed error
+            if (batchError.message && batchError.message.includes('No such column')) {
+                const match = batchError.message.match(/No such column\s+([^\s]+)\s+in table/);
+                const missingColumn = match ? match[1] : 'unknown';
+                const tableColumnsList = columnsWithTypes.map(col => col.name).join(', ');
+                const csvColumnsList = headers.join(', ');
+                throw new Error(`Column mismatch: The column "${missingColumn}" exists in your CSV but not in the table.\n\nTable columns: ${tableColumnsList}\n\nCSV columns: ${csvColumnsList}\n\nTry using the 'sanitizeHeaders' option if your headers contain spaces or special characters.`);
+            }
+            
+            // For other errors, rethrow with more context
+            throw new Error(`Failed to insert batch ${batchIndex + 1}: ${batchError.message}`);
+        }
+    };
+    
+    // Process the file in streaming mode
+    const processStream = new Promise((resolve, reject) => {
+        let processingBatch = false;
+        const fileStream = fs.createReadStream(filePath)
+            .pipe(csv({ 
+                separator: actualDelimiter, 
+                headers: headers,
+                skipLines: 1  // Skip header row
+            }));
         
-        for (let i = 0; i < allData.length; i += batchSize) {
-            const batch = allData.slice(i, i + batchSize);
-            console.log(`Inserting batch ${i / batchSize + 1} (${batch.length} rows)`);
+        // Modified processBatchAndResume to stop on errors instead of silently continuing
+        const processBatchAndResume = async () => {
+            if (currentBatch.length === 0 || processingBatch) return;
+            
+            processingBatch = true;
+            fileStream.pause();
             
             try {
-                // Convert batch data to CSV-style rows for insertion
-                // This is the most compatible approach for various client versions
-                let rows = '';
-                const columnNames = Object.keys(batch[0]);
+                const batchToProcess = [...currentBatch]; // Create a copy
+                currentBatch = []; // Clear for next batch
                 
-                // Build the VALUES part of the query with actual data
-                batch.forEach(row => {
-                    const values = columnNames.map(col => {
-                        // Properly escape string values
-                        const val = row[col];
-                        if (val === null || val === undefined) return 'NULL';
-                        if (typeof val === 'string') return `'${val.replace(/'/g, "''")}'`;
-                        return val;
+                // Additional data cleansing to prevent issues
+                const cleanedBatch = batchToProcess.map(row => {
+                    const cleanRow = {};
+                    headers.forEach(header => {
+                        // Clean the data and ensure it's string type
+                        let value = row[header] || '';
+                        
+                        // Truncate long values to prevent Field value too long errors
+                        if (typeof value === 'string' && value.length > MAX_STRING_LENGTH) {
+                            value = value.substring(0, MAX_STRING_LENGTH);
+                            console.log(`Truncated a long value in column "${header}" to ${MAX_STRING_LENGTH} characters`);
+                        }
+                        
+                        cleanRow[header] = value;
                     });
-                    rows += `(${values.join(', ')}),`;
+                    return cleanRow;
                 });
                 
-                // Remove trailing comma
-                if (rows.endsWith(',')) {
-                    rows = rows.slice(0, -1);
+                const processed = await processBatch(cleanedBatch, batchIndex++);
+                totalProcessed += processed;
+                recordCount += processed;
+                
+                // Log progress periodically
+                if (batchIndex % 5 === 0) {
+                    const percentComplete = totalRows > 0 ? Math.round((totalProcessed / totalRows) * 100) : 0;
+                    console.log(`Import progress: ~${percentComplete}% (${totalProcessed}/${totalRows} rows)`);
                 }
                 
-                const insertQuery = `INSERT INTO ${targetTable} (${columnNames.join(', ')}) VALUES ${rows}`;
-                await client.query(insertQuery).toPromise();
-                
-                recordCount += batch.length;
-                console.log(`Successfully inserted batch ${i / batchSize + 1}. Total records: ${recordCount}`);
-            } catch (batchError) {
-                console.error(`Error inserting batch ${i / batchSize + 1}:`, batchError);
-                throw new Error(`Failed to insert batch: ${batchError.message}`);
+                processingBatch = false;
+                fileStream.resume();
+            } catch (error) {
+                // Instead of continuing, stop the entire process
+                console.error(`Failed to process batch ${batchIndex}:`, error);
+                fileStream.destroy(); // Stop the file stream
+                reject(error); // Propagate the error
             }
-        }
-        console.log('Finished inserting batches.');
-    } else {
-        console.log('No data rows found in the file to insert.');
+        };
+        
+        fileStream.on('data', (row) => {
+            // Clean the row data 
+            const cleanRow = {};
+            headers.forEach(header => {
+                cleanRow[header] = row[header] || '';
+            });
+            
+            currentBatch.push(cleanRow);
+            
+            // Process when batch is full
+            if (currentBatch.length >= batchSize && !processingBatch) {
+                processBatchAndResume();
+            }
+        });
+        
+        fileStream.on('end', async () => {
+            // Wait for any in-progress batch processing to complete
+            while (processingBatch) {
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+            
+            // Process any remaining rows
+            if (currentBatch.length > 0) {
+                try {
+                    // Apply the same cleansing to the final batch
+                    const cleanedBatch = currentBatch.map(row => {
+                        const cleanRow = {};
+                        headers.forEach(header => {
+                            // Clean the data and ensure it's string type
+                            let value = row[header] || '';
+                            
+                            // Truncate long values to prevent Field value too long errors
+                            if (typeof value === 'string' && value.length > MAX_STRING_LENGTH) {
+                                value = value.substring(0, MAX_STRING_LENGTH);
+                                console.log(`Truncated a long value in column "${header}" to ${MAX_STRING_LENGTH} characters`);
+                            }
+                            
+                            cleanRow[header] = value;
+                        });
+                        return cleanRow;
+                    });
+                    
+                    const processed = await processBatch(cleanedBatch, batchIndex);
+                    totalProcessed += processed;
+                    recordCount += processed;
+                } catch (error) {
+                    // Propagate error instead of silently continuing
+                    console.error(`Failed to process final batch:`, error);
+                    reject(error);
+                    return;
+                }
+            }
+            
+            console.log(`Finished processing file. Successfully imported ${recordCount} rows.`);
+            resolve();
+        });
+        
+        fileStream.on('error', (error) => {
+            reject(new Error(`Error reading CSV file: ${error.message}`));
+        });
+    });
+    
+    // Wait for all processing to complete
+    await processStream;
+    
+    // Helper function to count lines in a file
+    async function countFileLines(filePath) {
+        return new Promise((resolve, reject) => {
+            let lineCount = 0;
+            const lineReader = require('readline').createInterface({
+                input: fs.createReadStream(filePath),
+                crlfDelay: Infinity
+            });
+            
+            lineReader.on('line', () => {
+                lineCount++;
+            });
+            
+            lineReader.on('close', () => {
+                resolve(lineCount);
+            });
+            
+            lineReader.on('error', (err) => {
+                reject(err);
+            });
+        });
     }
 
     res.status(200).json({
       success: true,
       message: `Successfully imported data into table '${tableName.trim()}'. Processed ${recordCount} rows.`,
-      recordCount: recordCount
+      recordCount: recordCount,
+      columnCount: columnsWithTypes.length,
+      tableName: tableName.trim()
     });
 
   } catch (error) {
@@ -764,9 +945,42 @@ exports.flatFileToClickHouse = async (req, res) => {
     if (filePath) {
       await fs.remove(filePath).catch(err => console.error('Error cleaning up file:', err));
     }
+    
+    // Enhanced error message handling
+    let errorMessage = error.message || 'An unknown error occurred';
+    let userFriendlyMessage = errorMessage;
+    let errorSolution = ''; // Additional guidance for fixing the issue
+    
+    // Handle specific ClickHouse errors with user-friendly messages
+    if (errorMessage.includes('Field value too long')) {
+      userFriendlyMessage = 'Some fields in your CSV file exceed ClickHouse\'s string length limits.';
+      errorSolution = 'Try preprocessing your data to truncate very long values. ClickHouse has a limit of approximately 65,535 characters per string field.';
+    } 
+    else if (errorMessage.includes('No such column')) {
+      userFriendlyMessage = 'Column mismatch between your CSV file and the ClickHouse table.';
+      errorSolution = 'Ensure your CSV headers match the expected column names. Try uploading to a new table or check for case sensitivity issues.';
+    }
+    else if (errorMessage.includes('Cannot parse')) {
+      userFriendlyMessage = 'ClickHouse couldn\'t parse some values in your data.';
+      errorSolution = 'Check that all values in your CSV match the expected column types. Dates should be in YYYY-MM-DD format, numbers should not contain text.';
+    } 
+    else if (errorMessage.includes('memory limit')) {
+      userFriendlyMessage = 'The import operation exceeded available memory.';
+      errorSolution = 'Try reducing your file size or importing in smaller batches.';
+    }
+    else if (errorMessage.includes('Column mismatch')) {
+      // Already a user-friendly message from our enhanced error handling
+      userFriendlyMessage = errorMessage;
+      errorSolution = 'Try uploading to a new table instead of an existing one, or ensure your CSV headers exactly match the table structure.';
+    }
+    
+    // Always return an error response - no more partial success handling
     res.status(500).json({
       success: false,
-      error: `Import failed: ${error.message || 'An unknown error occurred'}`
+      error: userFriendlyMessage,
+      solution: errorSolution,
+      details: errorMessage, // Include the original error message for debugging
+      recordCount: recordCount
     });
   } finally {
     if (filePath && fs.existsSync(filePath)) {

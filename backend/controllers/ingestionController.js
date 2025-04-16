@@ -40,20 +40,24 @@ function createClickHouseClient(config) {
 }
 
 /**
- * Transfer data from ClickHouse to flat file
+ * Transfer data from ClickHouse to CSV file
  */
 exports.clickhouseToFile = async (req, res, next) => {
   try {
+    // Get connection config from middleware
+    const clickhouse = req.connectionConfig;
+    
     const { 
-      clickhouse, // Connection details
       table,
       columns,
-      outputFormat = 'csv',
-      delimiter = ',',
       filename = `export-${Date.now()}.csv`
     } = req.body;
     
-    if (!clickhouse || !table || !columns || columns.length === 0) {
+    // Always use CSV format with comma delimiter
+    const outputFormat = 'csv';
+    const delimiter = ',';
+    
+    if (!table || !columns || columns.length === 0) {
       throw new ApiError('Missing required parameters', 400);
     }
     
@@ -65,7 +69,7 @@ exports.clickhouseToFile = async (req, res, next) => {
     jobStatus.set(jobId, {
       status: 'started',
       progress: 0,
-      message: 'Initializing transfer',
+      message: 'Initializing CSV export',
       recordsProcessed: 0,
       totalRecords: 0,
       startTime: new Date(),
@@ -268,8 +272,7 @@ exports.getStatus = async (req, res, next) => {
     if (!jobId) {
       throw new ApiError('Job ID is required', 400);
     }
-    
-    // Check if job exists, if not, return a more user-friendly response
+  
     if (!jobStatus.has(jobId)) {
       // Instead of throwing an error, return a more helpful response
       return res.status(404).json({

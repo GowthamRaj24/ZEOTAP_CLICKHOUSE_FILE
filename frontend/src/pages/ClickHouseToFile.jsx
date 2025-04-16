@@ -188,19 +188,42 @@ function ClickHouseToFile() {
       setError(null)
       setExportFile(null)
       
+      console.log('Starting export with params:', {
+        table: selectedTable,
+        columns: selectedColumns,
+        filename: `${selectedTable}-export.csv`
+      })
+      
       const response = await ingestionApi.clickhouseToFile({
         table: selectedTable,
         columns: selectedColumns,
-        outputFormat: exportFormat,
-        filename: `${selectedTable}-export.${exportFormat}`
+        outputFormat: 'csv',
+        filename: `${selectedTable}-export.csv`
       })
       
       setJobId(response.data.jobId)
       notify.info('Export started!')
     } catch (error) {
       console.error('Failed to start export:', error)
-      notify.error(`Failed to start export: ${error.response?.data?.error?.message || error.message}`)
-      setError(`Failed to start export: ${error.response?.data?.error?.message || error.message}`)
+      
+      // Extract the most useful error message
+      let errorMessage = 'Failed to start export'
+      
+      if (error.response?.data?.error) {
+        // If the error has a message property
+        if (typeof error.response.data.error === 'object' && error.response.data.error.message) {
+          errorMessage += `: ${error.response.data.error.message}`
+        } 
+        // If the error is a string
+        else if (typeof error.response.data.error === 'string') {
+          errorMessage += `: ${error.response.data.error}`
+        }
+      } else if (error.message) {
+        errorMessage += `: ${error.message}`
+      }
+      
+      notify.error(errorMessage)
+      setError(errorMessage)
     } finally {
       setLoading(false)
     }
@@ -233,9 +256,9 @@ function ClickHouseToFile() {
   return (
     <div className="max-w-4xl mx-auto">
       <div className="text-center mb-8">
-        <h1 className="text-3xl font-bold">ClickHouse to Flat File Export</h1>
+        <h1 className="text-3xl font-bold">ClickHouse to CSV Export</h1>
         <p className="text-xl text-gray-600 mt-2">
-          Export data from ClickHouse to a CSV or TSV file
+          Export data from ClickHouse to a CSV file
         </p>
       </div>
       
@@ -274,16 +297,7 @@ function ClickHouseToFile() {
             </div>
             
             <div className="mb-4">
-              <label className="block text-gray-700 mb-1">Format</label>
-              <select
-                className="input"
-                value={exportFormat}
-                onChange={(e) => setExportFormat(e.target.value)}
-                disabled={loading || !!jobId}
-              >
-                <option value="csv">CSV (Comma Separated)</option>
-                <option value="tsv">TSV (Tab Separated)</option>
-              </select>
+              <p className="text-gray-700">File Format: CSV (Comma Separated Values)</p>
             </div>
             
             <div className="flex space-x-4">
@@ -323,7 +337,7 @@ function ClickHouseToFile() {
                   className="btn btn-primary"
                   onClick={downloadExportFile}
                 >
-                  Download File
+                  Download CSV
                 </button>
               )}
             </div>
