@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react'
-import ClickHouseForm from '../components/ClickHouseForm'
 import ColumnSelector from '../components/ColumnSelector'
 import DataPreview from '../components/DataPreview'
 import ProgressBar from '../components/ProgressBar'
@@ -8,7 +7,6 @@ import { getApiUrl } from '../config/appConfig'
 import { notify } from '../config/toastConfig'
 
 function ClickHouseToFile() {
-  const [connection, setConnection] = useState(null)
   const [tables, setTables] = useState([])
   const [selectedTable, setSelectedTable] = useState('')
   const [columns, setColumns] = useState([])
@@ -23,22 +21,14 @@ function ClickHouseToFile() {
   const [error, setError] = useState(null)
   const [exportFile, setExportFile] = useState(null)
   
-  // Load tables when connection changes
+  // Load tables when component mounts
   useEffect(() => {
-    if (connection) {
-      loadTables()
-    } else {
-      setTables([])
-      setSelectedTable('')
-      setColumns([])
-      setSelectedColumns([])
-      setPreviewData(null)
-    }
-  }, [connection])
+    loadTables()
+  }, [])
   
   // Load columns when selected table changes
   useEffect(() => {
-    if (connection && selectedTable) {
+    if (selectedTable) {
       loadColumns(selectedTable)
     } else {
       setColumns([])
@@ -100,7 +90,7 @@ function ClickHouseToFile() {
   const loadTables = async () => {
     try {
       setLoading(true)
-      const response = await clickhouseApi.getTables(connection)
+      const response = await clickhouseApi.getTables()
       setTables(response.data.tables)
     } catch (error) {
       console.error('Failed to load tables:', error)
@@ -122,12 +112,7 @@ function ClickHouseToFile() {
     try {
       setLoading(true);
       
-      // Use the existing clickhouseApi service for consistency
-
-      console.log('connection', connection);
-      console.log('tableToUse', tableToUse);
       const response = await clickhouseApi.getColumns({
-        ...connection,
         table: tableToUse
       });
       
@@ -156,7 +141,6 @@ function ClickHouseToFile() {
     try {
       setLoading(true)
       const response = await clickhouseApi.previewData(
-        connection,
         selectedTable,
         selectedColumns,
         10
@@ -205,7 +189,6 @@ function ClickHouseToFile() {
       setExportFile(null)
       
       const response = await ingestionApi.clickhouseToFile({
-        clickhouse: connection,
         table: selectedTable,
         columns: selectedColumns,
         outputFormat: exportFormat,
@@ -256,110 +239,101 @@ function ClickHouseToFile() {
         </p>
       </div>
       
-      <ClickHouseForm 
-        onConnect={setConnection}
-        isConnected={!!connection}
-      />
+      <div className="card mb-6">
+        <h2 className="text-xl font-bold mb-4">Select Table</h2>
+        
+        <div className="mb-4">
+          <label className="block text-gray-700 mb-1">Table</label>
+          <select
+            className="input"
+            value={selectedTable}
+            onChange={(e) => handleTableSelect(e.target.value)}
+            disabled={loading}
+          >
+            <option value="">Select a table</option>
+            {tables.map((table) => (
+              <option key={table} value={table}>{table}</option>
+            ))}
+          </select>
+        </div>
+      </div>
       
-      {connection && (
+      {selectedTable && (
         <>
+          <ColumnSelector
+            columns={columns}
+            selectedColumns={selectedColumns}
+            onColumnToggle={handleColumnToggle}
+            onSelectAll={handleSelectAllColumns}
+            onSelectNone={handleSelectNoneColumns}
+          />
+          
           <div className="card mb-6">
-            <h2 className="text-xl font-bold mb-4">Select Table</h2>
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold">Export Options</h2>
+            </div>
             
             <div className="mb-4">
-              <label className="block text-gray-700 mb-1">Table</label>
+              <label className="block text-gray-700 mb-1">Format</label>
               <select
                 className="input"
-                value={selectedTable}
-                onChange={(e) => handleTableSelect(e.target.value)}
-                disabled={loading}
+                value={exportFormat}
+                onChange={(e) => setExportFormat(e.target.value)}
+                disabled={loading || !!jobId}
               >
-                <option value="">Select a table</option>
-                {tables.map((table) => (
-                  <option key={table} value={table}>{table}</option>
-                ))}
+                <option value="csv">CSV (Comma Separated)</option>
+                <option value="tsv">TSV (Tab Separated)</option>
               </select>
+            </div>
+            
+            <div className="flex space-x-4">
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={loadPreview}
+                disabled={loading || selectedColumns.length === 0}
+              >
+                Preview Data
+              </button>
+              
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={startExport}
+                disabled={loading || selectedColumns.length === 0 || !!jobId}
+              >
+                Start Export
+              </button>
             </div>
           </div>
           
-          {selectedTable && (
-            <>
-              <ColumnSelector
-                columns={columns}
-                selectedColumns={selectedColumns}
-                onColumnToggle={handleColumnToggle}
-                onSelectAll={handleSelectAllColumns}
-                onSelectNone={handleSelectNoneColumns}
+          {jobId && (
+            <div className="card mb-6">
+              <h2 className="text-xl font-bold mb-4">Export Progress</h2>
+              
+              <ProgressBar 
+                progress={progress} 
+                isComplete={isComplete}
+                error={error}
               />
               
-              <div className="card mb-6">
-                <div className="flex justify-between items-center mb-4">
-                  <h2 className="text-xl font-bold">Export Options</h2>
-                </div>
-                
-                <div className="mb-4">
-                  <label className="block text-gray-700 mb-1">Format</label>
-                  <select
-                    className="input"
-                    value={exportFormat}
-                    onChange={(e) => setExportFormat(e.target.value)}
-                    disabled={loading || !!jobId}
-                  >
-                    <option value="csv">CSV (Comma Separated)</option>
-                    <option value="tsv">TSV (Tab Separated)</option>
-                  </select>
-                </div>
-                
-                <div className="flex space-x-4">
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    onClick={loadPreview}
-                    disabled={loading || selectedColumns.length === 0}
-                  >
-                    Preview Data
-                  </button>
-                  
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    onClick={startExport}
-                    disabled={loading || selectedColumns.length === 0 || !!jobId}
-                  >
-                    Start Export
-                  </button>
-                </div>
-              </div>
-              
-              {jobId && (
-                <div className="card mb-6">
-                  <h2 className="text-xl font-bold mb-4">Export Progress</h2>
-                  
-                  <ProgressBar 
-                    progress={progress} 
-                    isComplete={isComplete}
-                    error={error}
-                  />
-                  
-                  {isComplete && exportFile && (
-                    <button
-                      type="button"
-                      className="btn btn-primary"
-                      onClick={downloadExportFile}
-                    >
-                      Download File
-                    </button>
-                  )}
-                </div>
+              {isComplete && exportFile && (
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={downloadExportFile}
+                >
+                  Download File
+                </button>
               )}
-              
-              {previewData && (
-                <DataPreview 
-                  data={previewData} 
-                  totalCount={totalCount}
-                />
-              )}
-            </>
+            </div>
+          )}
+          
+          {previewData && (
+            <DataPreview 
+              data={previewData} 
+              totalCount={totalCount}
+            />
           )}
         </>
       )}

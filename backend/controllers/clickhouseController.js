@@ -83,16 +83,11 @@ exports.testConnection = async (req, res) => {
 // List ClickHouse tables
 exports.listTables = async (req, res) => {
   try {
-    const { host, port, database, username, password, jwtToken, protocol } = req.body;
+    // Use connection config from middleware
+    const connectionConfig = req.connectionConfig;
+    const { host, port, database, username, password, jwtToken, protocol } = connectionConfig;
     
     console.log(`Connecting to ClickHouse with URL: ${protocol || 'https'}://${host}:${port}`);
-    
-    if (!host || !port || !database || !username) {
-      return res.status(400).json({
-        success: false,
-        error: 'Missing required connection parameters'
-      });
-    }
     
     const clickhouse = await connectToClickHouse({ 
       host, port, database, username, password, jwtToken, protocol 
@@ -116,17 +111,12 @@ exports.listTables = async (req, res) => {
 // Get ClickHouse table columns
 exports.getColumns = async (req, res) => {
   try {
-    const { host, port, database, username, password, jwtToken, protocol, table } = req.body;
+    // Use connection config from middleware
+    const connectionConfig = req.connectionConfig;
+    const { host, port, database, username, password, jwtToken, protocol } = connectionConfig;
+    const { table } = req.body;
     
-    console.log('getColumns request body:', JSON.stringify(req.body));
-    
-    
-    if (!host || !port || !database || !username) {
-      return res.status(400).json({
-        success: false,
-        error: 'Missing required connection parameters'
-      });
-    }
+    console.log('getColumns request for table:', table);
     
     if (!table) {
       // If no table provided, fetch all tables and return an empty columns array
@@ -170,8 +160,11 @@ exports.getColumns = async (req, res) => {
 // Preview ClickHouse data
 exports.previewData = async (req, res) => {
   try {
+    // Use connection config from middleware
+    const connectionConfig = req.connectionConfig;
+    const { host, port, database, username, password, jwtToken, protocol } = connectionConfig;
+    
     const { 
-      host, port, database, username, password, jwtToken, protocol,
       tables, table, joinCondition, columns, page = 1, pageSize = 100 
     } = req.body;
     
@@ -182,13 +175,6 @@ exports.previewData = async (req, res) => {
       return res.status(400).json({
         success: false,
         error: 'At least one table is required'
-      });
-    }
-    
-    if (!host || !port || !database || !username) {
-      return res.status(400).json({
-        success: false,
-        error: 'Missing required connection parameters'
       });
     }
     
@@ -577,13 +563,8 @@ function mapClickHouseType(chType) {
 
 // Flat file to ClickHouse
 exports.flatFileToClickHouse = async (req, res) => {
-  // Parse clickhouseConfig from stringified JSON
-  let parsedConfig;
-  try {
-    parsedConfig = JSON.parse(req.body.clickhouseConfig);
-  } catch (e) {
-    return res.status(400).json({ success: false, error: 'Invalid ClickHouse configuration format.' });
-  }
+  // Get connection config from middleware
+  const parsedConfig = req.connectionConfig;
   
   const { tableName, delimiter: delimiterChar } = req.body;
   const file = req.file;
@@ -757,7 +738,6 @@ exports.flatFileToClickHouse = async (req, res) => {
                     rows = rows.slice(0, -1);
                 }
                 
-                // Create and execute the complete INSERT statement
                 const insertQuery = `INSERT INTO ${targetTable} (${columnNames.join(', ')}) VALUES ${rows}`;
                 await client.query(insertQuery).toPromise();
                 

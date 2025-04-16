@@ -4,15 +4,25 @@ import { getApiUrl } from '../config/appConfig'
 // Export the baseURL so it can be imported elsewhere
 export const baseURL = getApiUrl()
 
+// Create an axios instance with the baseURL
 const api = axios.create({
   baseURL
+})
+
+// Add an interceptor to add the auth token to requests
+api.interceptors.request.use(config => {
+  const token = localStorage.getItem('clickhouse_token')
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`
+  }
+  return config
 })
 
 // ClickHouse API
 export const clickhouseApi = {
   testConnection: (config) => api.post('/clickhouse/test-connection', config),
   
-  getTables: (config) => api.post('/clickhouse/tables', config),
+  getTables: () => api.post('/clickhouse/tables', {}),
   
   getColumns: (params) => api.post('/clickhouse/columns', params),
   
@@ -25,7 +35,7 @@ export const clickhouseApi = {
     }
   }),
   
-  previewData: (connection, table, columns, limit = 10, page = 1, joinCondition = null, additionalTables = []) => {
+  previewData: (table, columns, limit = 10, page = 1, joinCondition = null, additionalTables = []) => {
     const tables = [table];
     
     // Add additional tables if provided
@@ -34,13 +44,22 @@ export const clickhouseApi = {
     }
     
     return api.post('/clickhouse/preview-data', {
-      ...connection,
       tables,
       columns,
       page,
       pageSize: limit,
       joinCondition: tables.length > 1 ? joinCondition : undefined
     });
+  }
+}
+
+// Auth API
+export const authApi = {
+  connect: (config) => api.post('/auth/connect', config),
+  
+  logout: () => {
+    localStorage.removeItem('clickhouse_token')
+    return Promise.resolve()
   }
 }
 

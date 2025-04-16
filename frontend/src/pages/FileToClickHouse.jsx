@@ -1,11 +1,9 @@
 import React, { useState } from 'react'
-import ClickHouseForm from '../components/ClickHouseForm'
 import { clickhouseApi } from '../services/api'
 import { FaFileAlt, FaDatabase, FaTable } from 'react-icons/fa'
 import { notify } from '../config/toastConfig'
 
 function FileToClickHouse() {
-  const [clickhouseConfig, setClickhouseConfig] = useState(null)
   const [file, setFile] = useState(null)
   const [delimiter, setDelimiter] = useState(',') // Default to comma
   const [tableName, setTableName] = useState('') // Target table name
@@ -29,10 +27,6 @@ function FileToClickHouse() {
     setError(null)
     setImportResult(null)
 
-    if (!clickhouseConfig) {
-      notify.error('Please connect to ClickHouse first')
-      return
-    }
     if (!file) {
       notify.error('Please select a file')
       return
@@ -57,7 +51,6 @@ function FileToClickHouse() {
       const formData = new FormData()
       formData.append('file', file)
       // Append other data as strings
-      formData.append('clickhouseConfig', JSON.stringify(clickhouseConfig))
       formData.append('tableName', tableName.trim())
       formData.append('delimiter', delimiter)
 
@@ -91,8 +84,6 @@ function FileToClickHouse() {
           Import data directly from CSV/TSV files to your ClickHouse database
         </p>
       </div>
-      
-      <ClickHouseForm onConnect={setClickhouseConfig} isConnected={!!clickhouseConfig} />
       
       <div className="card mb-6">
         <h2 className="text-xl font-bold mb-4 flex items-center">
@@ -175,7 +166,7 @@ function FileToClickHouse() {
         <button
           onClick={handleImport}
           className="btn btn-primary w-full md:w-auto"
-          disabled={!file || !delimiter || !tableName.trim() || loading || !clickhouseConfig}
+          disabled={!file || !delimiter || !tableName.trim() || loading}
         >
           {loading ? 'Importing...' : 'Import Data to ClickHouse'}
         </button>
@@ -202,7 +193,6 @@ function FileToClickHouse() {
                 )}
             </div>
         )}
-
     </div>
   )
 }

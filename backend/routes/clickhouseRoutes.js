@@ -1,26 +1,17 @@
 const express = require('express');
 const router = express.Router();
 const clickhouseController = require('../controllers/clickhouseController');
+const { verifyConnectionAuth } = require('../middleware/authMiddleware');
 
-// Test connection to ClickHouse
+// Legacy route for backward compatibility
 router.post('/test-connection', clickhouseController.testConnection);
 
-// Get tables from ClickHouse
-router.post('/tables', clickhouseController.listTables);
-
-// Get columns for a specific table
-router.post('/columns', clickhouseController.getColumns);
-
-// Preview data from a table
-router.post('/preview', clickhouseController.previewData);
-
-// Export data from ClickHouse
-router.post('/export', clickhouseController.exportToFile);
-
-// Import data into ClickHouse
-router.post('/import', clickhouseController.importFromFile);
-
-// Make sure this route exists
-router.post('/preview-data', clickhouseController.previewData);
+// Protected routes that require authentication
+router.post('/tables', verifyConnectionAuth, clickhouseController.listTables);
+router.post('/columns', verifyConnectionAuth, clickhouseController.getColumns);
+router.post('/preview', verifyConnectionAuth, clickhouseController.previewData);
+router.post('/export', verifyConnectionAuth, clickhouseController.exportToFile);
+router.post('/import', verifyConnectionAuth, clickhouseController.importFromFile);
+router.post('/preview-data', verifyConnectionAuth, clickhouseController.previewData);
 
 module.exports = router; 

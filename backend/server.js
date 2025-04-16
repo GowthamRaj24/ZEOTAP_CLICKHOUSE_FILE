@@ -9,6 +9,7 @@ const fs = require('fs-extra');
 const multer = require('multer');
 const fileRoutes = require('./routes/fileRoutes');
 const clickhouseRoutes = require('./routes/clickhouseRoutes');
+const authRoutes = require('./routes/authRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -54,6 +55,7 @@ const upload = multer({ storage: storage });
 app.use('/api', routes);
 app.use('/api/files', fileRoutes);
 app.use('/api/clickhouse', clickhouseRoutes);
+app.use('/api/auth', authRoutes);
 
 // Error handling middleware
 app.use(errorHandler);

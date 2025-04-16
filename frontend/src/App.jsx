@@ -9,6 +9,8 @@ import FileToClickHouse from './pages/FileToClickHouse'
 import 'react-toastify/dist/ReactToastify.css'
 import ErrorBoundary from './components/ErrorBoundary'
 import { containerConfig } from './config/toastConfig'
+import DatabaseConnect from './pages/DatabaseConnect'
+import PrivateRoute from './components/PrivateRoute'
 
 function App() {
   return (
@@ -17,9 +19,25 @@ function App() {
         <Header />
         <main className="flex-grow container mx-auto px-4 py-8">
           <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/clickhouse-to-file" element={<ClickHouseToFile />} />
-            <Route path="/file-to-clickhouse" element={<FileToClickHouse />} />
+            {/* Public Routes */}
+            <Route path="/connect" element={<DatabaseConnect />} />
+            
+            {/* Protected Routes */}
+            <Route path="/" element={
+              <PrivateRoute>
+                <Home />
+              </PrivateRoute>
+            } />
+            <Route path="/clickhouse-to-file" element={
+              <PrivateRoute>
+                <ClickHouseToFile />
+              </PrivateRoute>
+            } />
+            <Route path="/file-to-clickhouse" element={
+              <PrivateRoute>
+                <FileToClickHouse />
+              </PrivateRoute>
+            } />
           </Routes>
         </main>
         <Footer />

@@ -5,6 +5,7 @@ const path = require('path');
 const fs = require('fs-extra');
 const fileController = require('../controllers/fileController');
 const clickhouseController = require('../controllers/clickhouseController');
+const { verifyConnectionAuth } = require('../middleware/authMiddleware');
 
 // Define uploads directory consistently
 const uploadsDir = path.join(__dirname, '..', 'uploads');
@@ -38,7 +39,7 @@ const upload = multer({ storage: storage });
 // router.post('/clickhouse/preview', fileController.previewClickHouseData);
 // router.post('/clickhouse-to-file', fileController.clickHouseToFlatFile);
 
-// Use clickhouseController for file import
-router.post('/file-to-clickhouse', upload.single('file'), clickhouseController.flatFileToClickHouse);
+// Use clickhouseController for file import - protected by auth middleware
+router.post('/file-to-clickhouse', verifyConnectionAuth, upload.single('file'), clickhouseController.flatFileToClickHouse);
 
 module.exports = router; 

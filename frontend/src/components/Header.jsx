@@ -1,9 +1,25 @@
-import React from 'react'
-import { Link, useLocation } from 'react-router-dom'
-import { FaDatabase, FaChevronDown } from 'react-icons/fa'
+import React, { useState, useEffect } from 'react'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { FaDatabase, FaChevronDown, FaSignOutAlt, FaUser, FaKey } from 'react-icons/fa'
+import { authApi } from '../services/api'
+import { notify } from '../config/toastConfig'
 
 function Header() {
   const location = useLocation()
+  const navigate = useNavigate()
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  
+  useEffect(() => {
+    // Check if user is authenticated
+    const token = localStorage.getItem('clickhouse_token')
+    setIsAuthenticated(!!token)
+  }, [location.pathname]) // Re-check when path changes
+  
+  const handleLogout = () => {
+    authApi.logout()
+    notify.info('You have been logged out')
+    navigate('/connect')
+  }
   
   return (
     <header className="bg-white shadow-lg border-b border-secondary-200">
@@ -23,17 +39,53 @@ function Header() {
             </div>
           </Link>
           
-          <nav className="flex space-x-1">
-            <NavLink to="/" currentPath={location.pathname}>
-              Dashboard
-            </NavLink>
-            <NavLink to="/clickhouse-to-file" currentPath={location.pathname}>
-              ClickHouse → File
-            </NavLink>
-            <NavLink to="/file-to-clickhouse" currentPath={location.pathname}>
-              File → ClickHouse
-            </NavLink>
-          </nav>
+          <div className="flex items-center space-x-4">
+            {isAuthenticated && (
+              <nav className="flex space-x-1">
+                <NavLink to="/" currentPath={location.pathname}>
+                  Dashboard
+                </NavLink>
+                <NavLink to="/clickhouse-to-file" currentPath={location.pathname}>
+                  ClickHouse → File
+                </NavLink>
+                <NavLink to="/file-to-clickhouse" currentPath={location.pathname}>
+                  File → ClickHouse
+                </NavLink>
+              </nav>
+            )}
+            
+            {isAuthenticated && (
+              <>
+                <Link
+                  to="/connect?show=true"
+                  className="flex items-center space-x-2 px-4 py-2 rounded-lg text-secondary-600 hover:bg-secondary-100 hover:text-secondary-900 transition-all duration-200"
+                  title="View JWT Token"
+                >
+                  <FaKey />
+                  <span className="hidden md:inline">JWT Token</span>
+                </Link>
+                
+                <button
+                  onClick={handleLogout}
+                  className="flex items-center space-x-2 px-4 py-2 rounded-lg text-secondary-600 hover:bg-secondary-100 hover:text-secondary-900 transition-all duration-200"
+                  title="Logout"
+                >
+                  <FaSignOutAlt />
+                  <span className="hidden md:inline">Logout</span>
+                </button>
+              </>
+            )}
+            
+            {!isAuthenticated && (
+              <Link
+                to="/connect"
+                className="flex items-center space-x-2 px-4 py-2 rounded-lg text-secondary-600 hover:bg-secondary-100 hover:text-secondary-900 transition-all duration-200"
+              >
+                <FaUser />
+                <span>Connect</span>
+              </Link>
+            )}
+          </div>
         </div>
       </div>
     </header>
