@@ -2,6 +2,16 @@
 
 A full-stack application that allows for bidirectional data transfer between ClickHouse databases and flat files (CSV/TSV).
 
+## Demo Credentials
+
+For testing purposes, you can use the following password to access the demo database:
+
+```
+e_hAa5XaPabFO
+```
+
+**Note**: These credentials are for demonstration purposes only. Do not use for production data.
+
 ## Features
 
 - **ClickHouse to File**: Export data from ClickHouse tables to CSV/TSV files
