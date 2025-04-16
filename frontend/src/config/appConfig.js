@@ -11,7 +11,7 @@
  * - true: Uses the deployed backend at https://zeotap-clickhouse-file.onrender.com
  * - false: Uses the local backend at http://localhost:5000
  */
-export const deployment = false;
+export const deployment = true;
 
 // API URLs based on environment
 export const apiUrls = {
