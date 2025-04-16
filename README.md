@@ -9,6 +9,8 @@ A full-stack application that allows for bidirectional data transfer between Cli
 - **Table/Column Selection**: Select specific tables and columns for import/export
 - **Data Preview**: Preview data before importing or exporting
 - **Progress Tracking**: Real-time progress tracking for long-running operations
+- **JWT Authentication**: Secure connection to ClickHouse with JWT token-based authentication
+- **Responsive UI**: Mobile-friendly design for use on different devices
 
 ## Technology Stack
 
@@ -24,6 +26,8 @@ A full-stack application that allows for bidirectional data transfer between Cli
 - ClickHouse client for database interactions
 - Multer for file uploads
 - CSV Parser/Writer for file processing
+- JWT for secure authentication
+- Stream processing for handling large files
 
 ## Prerequisites
 
@@ -47,8 +51,9 @@ npm install
 
 Create a `.env` file in the backend directory with the following variables:
 ```
-PORT=3001
+PORT=5000
 NODE_ENV=development
+JWT_SECRET=your_jwt_secret
 CLICKHOUSE_HOST=your_clickhouse_host
 CLICKHOUSE_PORT=your_clickhouse_port
 CLICKHOUSE_DB=your_clickhouse_db
@@ -62,9 +67,16 @@ cd ../frontend
 npm install
 ```
 
-Create a `.env.development` file in the frontend directory:
-```
-VITE_API_URL=http://localhost:3001
+Configure the API URL in `/frontend/src/config/appConfig.js`:
+```javascript
+// Set deployment to false for local development
+export const deployment = false;
+
+// API URLs based on environment
+export const apiUrls = {
+  development: 'http://localhost:5000/api',
+  production: 'https://your-production-api-url.com/api'
+};
 ```
 
 ## Running the Application
@@ -88,57 +100,123 @@ npm run preview # To preview production build
 
 ## Usage
 
-1. **ClickHouse to File Export**:
-   - Connect to your ClickHouse database
-   - Select the table and columns to export
-   - Choose the export format (CSV/TSV)
-   - Start the export process
-   - Download the exported file when ready
+### Authentication
+1. Navigate to the Connect page
+2. Enter your ClickHouse connection details:
+   - Host (without https://)
+   - Port (usually 8443 for ClickHouse Cloud)
+   - Database name (default if not specified)
+   - Username and password
+3. Click "Connect to ClickHouse"
+4. Upon successful connection, a JWT token is generated and stored in the browser
 
-2. **File to ClickHouse Import**:
-   - Connect to your ClickHouse database
-   - Upload a CSV/TSV file
-   - Map columns from the file to ClickHouse table columns
-   - Preview data to ensure mapping is correct
-   - Start the import process
+### ClickHouse to File Export
+1. Navigate to the "ClickHouse → File" page
+2. Select the table and columns to export
+3. Click "Preview Data" to see what will be exported
+4. Click "Start Export" to begin the export process
+5. Once completed, click "Download CSV" to save the file
+
+### File to ClickHouse Import
+1. Navigate to the "File → ClickHouse" page
+2. Select a CSV or TSV file (up to 100MB recommended)
+3. Enter a target table name (a new table will be created if it doesn't exist)
+4. Click "Preview Data" to verify the content
+5. Click "Import CSV to ClickHouse" to start the import
+6. View the results or any error messages in the "Import Status" section
+
+## Advanced Error Handling
+
+The application features robust error handling, particularly for file imports:
+
+### File to ClickHouse Import
+
+- **Validation Checks**: Performs extensive validation on file format, table names, and data types
+- **Detailed Error Messages**: Provides specific error messages with underlying technical details
+- **Error Solutions**: Suggests solutions for common issues like field length limits
+- **Immediate Error Stoppage**: Stops processing immediately when errors occur instead of continuing with partial imports
+- **Error Recovery Information**: Shows how many records were processed before an error occurred
+- **Common Error Handling**:
+  - Field value too long: Identifies when text exceeds ClickHouse's 65,535 character limit
+  - Column mismatches: Detects when CSV headers don't match table structure
+  - Data parsing errors: Alerts when data can't be converted to expected types
+  - Memory limitations: Warns when the import exceeds available resources
+
+Example error feedback:
+```
+Import failed: Some fields in your CSV file exceed ClickHouse's string length limits.
+
+Processed 3000 rows before the error occurred.
+
+Suggested solution: Try preprocessing your data to truncate very long values. 
+ClickHouse has a limit of approximately 65,535 characters per string field.
+```
+
+## Performance Optimizations
+
+- **Streaming Data Processing**: Files are processed as streams to handle large datasets efficiently
+- **Batched Inserts**: Data is inserted in batches of 1,000 rows for optimal performance
+- **Memory Management**: Careful memory usage to prevent out-of-memory errors
+- **ClickHouse Session Settings**: Optimized settings for better insert performance
+- **Automatic Header Sanitization**: Column names are sanitized to ensure compatibility
+
+## Security Features
+
+- **JWT Authentication**: Secure token-based authentication for ClickHouse connections
+- **Input Validation**: Thorough validation of all inputs to prevent injection attacks
+- **File Cleanup**: Automatic removal of temporary files after processing
+- **Escaped Values**: Proper escaping of values to prevent SQL injection
+- **Authorization Middleware**: Protected routes that require authentication
 
 ## Project Structure
 
 ```
 bidirectional-clickhouse/
 ├── backend/
-│   ├── config/         # Configuration files
-│   ├── controllers/    # Request handlers
-│   ├── routes/         # API routes
-│   ├── services/       # Business logic
-│   ├── uploads/        # Uploaded files storage
-│   └── utils/          # Utility functions
+│   ├── config/         # Configuration files and DB setup
+│   ├── controllers/    # Request handlers for different operations
+│   ├── middleware/     # Authentication and request processing middleware
+│   ├── routes/         # API route definitions
+│   ├── services/       # Business logic for data processing
+│   ├── uploads/        # Temporary storage for files
+│   └── utils/          # Utility functions (JWT, error handling)
 ├── frontend/
 │   ├── public/         # Static assets
 │   └── src/
 │       ├── components/ # Reusable UI components
-│       ├── pages/      # Page components
+│       ├── config/     # Frontend configuration
+│       ├── pages/      # Page components (FileToClickHouse, ClickHouseToFile)
 │       └── services/   # API service functions
 └── README.md           # Project documentation
 ```
 
 ## Deployment
 
-### Backend Deployment
-The backend can be deployed to any Node.js hosting service like Heroku, Render, or AWS.
+The application is currently deployed at:
+- Frontend: https://zeotap-clickhouse-file.onrender.com
+- Backend API: https://zeotap-clickhouse-file.onrender.com/api
 
-```bash
-cd backend
-npm run build
-```
+### Deployment Configuration
 
-### Frontend Deployment
-The frontend can be deployed to static hosting services like Netlify, Vercel, or GitHub Pages.
+For production deployment, update the following:
 
-```bash
-cd frontend
-npm run build
-```
+1. In `/frontend/src/config/appConfig.js`:
+   ```javascript
+   export const deployment = true;
+   ```
+
+2. Ensure environment variables are properly set in your hosting environment
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Connection Failed**: Ensure your ClickHouse credentials are correct and the server is accessible.
+2. **Import Errors**: Check the error details and suggested solutions. Common issues include:
+   - Very long text fields exceeding ClickHouse limits
+   - Mismatched column names between CSV headers and ClickHouse tables
+   - Data that can't be parsed into the expected types
+3. **Memory Issues**: Try with smaller files or reduce batch size for very large imports
 
 ## Contributing
 
@@ -147,3 +225,7 @@ npm run build
 3. Commit your changes (`git commit -m 'Add some amazing feature'`)
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
+
+## License
+
+This project is licensed under the MIT License.
